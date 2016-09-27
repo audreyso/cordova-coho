@@ -61,7 +61,8 @@ function configureReleaseCommandFlags(opt) {
     var opt = flagutil.registerRepoFlag(opt)
     opt = opt
         .options('version', {
-            desc: 'The version to use for the branch. Must match the pattern #.#.#[-rc#]'
+            desc: 'The version to use for the branch. Must match the pattern #.#.#[-rc#]',
+            demand: true
          });
     opt = flagutil.registerHelpFlag(opt);
     argv = opt.argv;
@@ -70,7 +71,7 @@ function configureReleaseCommandFlags(opt) {
         optimist.showHelp();
         process.exit(1);
     }
-
+    var version = flagutil.validateVersionString(argv.version);
     return argv;
 }
 
@@ -127,32 +128,14 @@ exports.prepareReleaseBranchCommand = function*() {
                '\n' +
                'Usage: $0 prepare-release-branch --version=3.6.0 -r platform')
     );
-   
     var repos = flagutil.computeReposFromFlag(argv.r);
-    var branchName = null;
- 
+    var version = flagutil.validateVersionString(argv.version);
+    var branchName = getVersionBranchName(version);
 
     // First - perform precondition checks.
     yield repoupdate.updateRepos(repos, [], true);
 
     yield repoutil.forEachRepo(repos, function*(repo) {
-       
-        var version = null;
-
-        if (argv.version === undefined) {
-                // Grabbing version from platformPackageJson
-                var platformPackage = path.join(process.cwd(), 'package.json');
-                var platformPackageJson = require(platformPackage);
-                var version = flagutil.validateVersionString(platformPackageJson.version);
-             
-        } else {
-
-                var version = flagutil.validateVersionString(argv.version);
-
-            }
-
-        branchName = getVersionBranchName(version);
-
         yield gitutil.stashAndPop(repo, function*() {
             // git fetch + update master
             yield repoupdate.updateRepos([repo], ['master'], false);
@@ -169,8 +152,7 @@ exports.prepareReleaseBranchCommand = function*() {
                 yield gitutil.gitCheckout('master');
                 yield executil.execHelper(executil.ARGS('git checkout -b ' + branchName));
             }
-    
-            yield updateJsSnapshot(repo, version); 
+            yield updateJsSnapshot(repo, version);
             print(repo.repoName + ': ' + 'Setting VERSION to "' + version + '" on branch + "' + branchName + '".');
             yield versionutil.updateRepoVersion(repo, version);
 
